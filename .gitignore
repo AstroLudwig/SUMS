@@ -1,3 +1,6 @@
+# Git Ignore the giant Data Folder
+Data/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
