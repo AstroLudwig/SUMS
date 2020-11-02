@@ -24,6 +24,7 @@ class BkgdEstimator:
         print('Masked Sigma Clipped Stats Original Data:',self.mean,self.median,self.std)
         
         # Sigma clip bright obvious things to avoid biasing the background estimate
+        # TO DO: New photutils need to change sigma to snr
         self.sigma_clip = SigmaClip(sigma=3) 
         # Apply the SExtractor algorithm to our estimation
         self.bkg_estimator = SExtractorBackground() 

@@ -10,7 +10,7 @@ from scipy.integrate import quad
 class psf_fit():
     
     
-    def __init__(self,pixel_per_arsecond,uvfilter,width,save=False,cog_file="swureef20041120v104.fits",fwhm=2.5):
+    def __init__(self,pixel_per_arsecond,uvfilter,width,save=False,cog_file="../Data/Calibration/swureef20041120v104.fits",fwhm=2.5):
     
         
         if uvfilter == "UVM2" or uvfilter == "uvm2": 

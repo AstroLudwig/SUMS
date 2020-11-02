@@ -121,7 +121,7 @@ class HeasarcRoutines:
         def sss(self):
             '''Apply the small scale sensitivity correction'''
             
-            sss_command = 'uvotlss input=TABLE infile=' +self.file_location + '+1 lssfile=sssfile5.fits.gz chatter=1'
+            sss_command = 'uvotlss input=TABLE infile=' +self.file_location + '+1 lssfile=../Data/Calibration/sssfile5.fits.gz chatter=1'
     
             self.bash_command('heainit; %s' %sss_command,print_output=False)
             
@@ -170,7 +170,7 @@ class HeasarcRoutines:
             tmid = (hdr1['TSTART']+hdr1['TSTOP'])/2.
             
             # Read in the calibration file:
-            tab2=fits.open('swusenscorr20041120v005.fits')
+            tab2=fits.open('../Data/Calibration/swusenscorr20041120v005.fits')
             
             if uv_filter == 'UVW1':
                 dat2=tab2[4].data
