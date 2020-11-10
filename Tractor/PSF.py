@@ -58,11 +58,17 @@ class psf_fit():
 
         # Needs to be odd and an integer.
         size = n * to_pix
+        
+        print(size)
 
         if size - np.round(size) != 0:
             size = int(np.ceil(size))
         if size % 2 != 1:
-            size = int(size + 1	)
+            size = int(size + 1)
+        if size - np.round(size) == 0:
+            size = int(size)
+            
+        print(size)
         print("Scaling is "+str(1/to_pix)+" ArcSeconds per Pixel")
         print("Image needs to be "+str(size)+" pixels to be "+str(n)+" ArcSeconds in size.")	
 
@@ -81,6 +87,7 @@ class psf_fit():
                     large_psf[i,j] = Models.two_gauss(distance, *Gauss_popt)
 
         # Regrid by summing things back into the original resolution
+        print(size)
         pixel_psf = np.zeros(size*size).reshape(size,size)
         shrink = 1 / sample_rate
         for i in range(size):
@@ -112,7 +119,8 @@ class psf_fit():
                     inner_sum += pixel_psf[i,j]
         print("Sum After Normalization ",inner_sum)
         
-        self.psf = pixel_psf
+        # Saving PSF as Float32 to be Friendly with Dustin's Code
+        self.psf = np.array(pixel_psf,np.float32)
         
         if save:
             np.savetxt("PSF/PSF_"+str(n)+"x"+str(n)+"_arcsec_image_"+str(1/to_pix)+"_arcsec_per_pixel_normalized.txt",pixel_psf)
