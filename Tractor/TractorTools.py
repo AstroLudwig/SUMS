@@ -26,18 +26,23 @@ from photutils import aperture_photometry
 
 class PhotometryTools:
     
-    def __init__(self,source,background,psf_filename,fits_table_sname,save_output=False,fit_sky=False,fit_positions=False,threshold=1.5):
+    def __init__(self,source,background,psf_filename,fits_table_sname,save_output=False,fit_positions=np.nan,threshold=1.5):
         
+        # Background Handling 
         sky_background=background.background
         error=background.error_image
         subtraction_bkgd=background.median2
+        # Estimated bkgd with PhotUtils, subtracting off from image.
+        self.image = np.copy(source.data) - sky_background
+        # Basically 0, the median of the subtracted image, makes tractor happier than null background
+        self.sky = ConstantSky(subtraction_bkgd)
         
-        if type(psf_filename) == np.ndarray:
+        # PSF Handling
+        if type(psf_filename) == np.ndarray: # Default, unique image to image
             self.psf = psf_filename
-            
-        elif Path(psf_filename).suffix == ".txt":
+        elif Path(psf_filename).suffix == ".txt": # For assuming psf is constant to save time. 
             self.psf = np.loadtxt(psf_filename)
-        elif Path(psf_filename).suffix == ".fits":
+        elif Path(psf_filename).suffix == ".fits": # For pyraf handling
             self.psf_data = fits.open(psf_filename)[0].data
             # normalize out to 5 arcsecs
             n = np.shape(self.psf_data)[0] 
@@ -53,48 +58,32 @@ class PhotometryTools:
                         inner_sum += pixel_psf[i,j]
             self.psf = self.psf_data / inner_sum
           
-
         self.pixel_scale = source.cdelt * 3600
-        
-        if type(sky_background) == np.float64 or type(sky_background) == np.float:
-            self.sky = ConstantSky(sky_background)
-        if type(sky_background) == np.nan:
-            self.sky = NullSky()
-        if type(sky_background) == np.ndarray:
-            self.image = np.copy(source.data) - sky_background
-            self.sky = ConstantSky(subtraction_bkgd)
-        else:
-            self.image = np.copy(source.data)
-        
+         
         ## Tractor 
         self.tractor_image = self.get_tractor_image(self.image,error,self.sky)
         self.tractor_sources = self.get_tractor_sources(source,background,threshold)
         self.tractor_object = self.get_tractor_object(self.tractor_image,self.tractor_sources)
        
-        
+        # Get zeroth order result
         self.zeroth_model = self.tractor_object.getModelImage(0)
         self.zeroth_chi = self.tractor_object.getChiImage(0)
         
         # Freeze images
         self.tractor_object.freezeParam('images')
         
-        # Option to fit sky
-        if fit_sky:
-            self.tractor_object.thawPathsTo('sky')
-        
-        fwhm = 2.5
-        sigma =  fwhm/2.355
-        sigma = sigma/4.
-        
         # Freeze Positions or put Gaussian priors:
-        if fit_positions == False:
+        if np.isnan(fit_positions):
+            # Forced Photometry
             for source_object in self.tractor_object.catalog:
                 source_object.freezeParam('pos')
         else:
+            # Semi-Forced Photometry
             for source_object in self.tractor_object.catalog:
-                source_object.pos.addGaussianPrior('x',source_object.pos.x,sigma)
-                source_object.pos.addGaussianPrior('y',source_object.pos.y,sigma)
-            
+                source_object.pos.addGaussianPrior('x',source_object.pos.x,fit_positions)
+                source_object.pos.addGaussianPrior('y',source_object.pos.y,fit_positions)
+        
+        # Run optimization    
         self.optimize(self.tractor_object)
         
         self.model = self.tractor_object.getModelImage(0)
@@ -102,13 +91,13 @@ class PhotometryTools:
         
         self.tractor_catalog = self.tractor_object.catalog
         
-        # ???
+        # Dustin Suggestion to thaw everything at the end.
         self.tractor_object.thawAllRecursive()
         
+        ################################################
+        ## Setting up Fits Table to Input into Heasarc #
+        ################################################
         
-        ########################################
-        ## Gather all things for output catalog:
-        ########################################
         self.x,self.y,self.flux = self.get_library(self.tractor_catalog)
         
         # Figure out what count rate is left in the residual image:
@@ -163,19 +152,18 @@ class PhotometryTools:
     
     def get_tractor_sources(self,source,background,threshold):
         X,Y = source.pixel_positions
+        # Initial photometric guesses
         intensity = source.source_intensities
+        # Photometry on the background
         back_rate = background.BACK_RATE
+        # Remove objects outside image, I.E. in black diagonal area of fits
         outside = source.outside
+        # Filter sources to give tractor based on some threshhold over the background. 
         index = np.where((intensity > threshold*back_rate) & (outside > 0.))[0]
 
         X2 = X[index]
         Y2 = Y[index]
         intensity2 = intensity[index]
-        
-        #X,Y = source.pixel_positions
-        #return [PointSource(PixPos(x,y),Flux(guess)) 
-        #                for x, y, guess 
-        #                in zip(X,Y,source.source_intensities)]
         
         return [PointSource(PixPos(x,y),Flux(guess)) 
                         for x, y, guess 
@@ -188,6 +176,7 @@ class PhotometryTools:
             for i in range(100):
                 dlnp,X,alpha = tractor_object.optimize()
                 print ('dlnp', dlnp)
+                # If Likelihood condition is reached, stop. 
                 if dlnp < 1e-3:
                     var = tractor_object.optimize(variance=True,just_variance=True)
                     break   
@@ -222,13 +211,6 @@ class PhotometryTools:
     def update_header(self,fits_table_sname,source):
         hdr = fits.open(fits_table_sname)
         header = hdr[1].header
-        #header['BKGD    '] = self.background
-        #header['BKGD5AS'] = self.background_5as
-        #header['BKGD5ASE'] = self.err_background_5as
-        #header['TELESCOP'] = 'SWIFT   '
-        #header['INSTRUME'] = 'UVOTA   '
-        #header['FILTER'] = '%s    ' % source.filter
-        
         header['TSTART'] = source.header['TSTART']
         header['TSTOP'] = source.header['TSTOP']
         header['EXPOSURE'] = source.header["EXPOSURE"]
