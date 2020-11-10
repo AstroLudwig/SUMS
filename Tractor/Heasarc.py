@@ -205,9 +205,9 @@ class HeasarcRoutines:
             hdu_new = fits.BinTableHDU.from_columns(orig_cols + new_cols)
        
             #Make new header updates. 
-            hdr1['TTYPE34'] = 'AP_COI_SRC_RATE'                                                        
+            hdr1['TTYPE34'] = 'SENSCORR_RATE'                                                        
             hdr1['TFORM34'] = '1E      '                                                            
-            hdr1['TTYPE35'] = 'AP_COI_SRC_RATE_ERR'                                                    
+            hdr1['TTYPE35'] = 'SENSCORR_RATE_ERR'                                                    
             hdr1['TFORM35'] = '1E      '  
             
             hdr1['SENS_FAC'] = senscor_factor
