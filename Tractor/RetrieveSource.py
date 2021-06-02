@@ -63,7 +63,7 @@ class get_meta():
                  aperture_size=2.5*2,
                  xdim=[0,300],
                  ydim=[0,300],
-                 optical_catalog="../Data/Optical/table1_lmc.dat"):
+                 optical_catalog="../Data/Optical/table1_smc.dat"):
         
         # Get general information from the header 
         self.header = hdu.header
@@ -102,7 +102,7 @@ class get_meta():
         
         # Do some initial photometry to get an initial guess 
         
-        self.source_intensities = np.array(self.get_intensities(self.catalog,Umag_cutoff,Bmag_cutoff,aperture_size))
+        self.source_intensities = np.array(self.get_intensities(self.catalog,aperture_size))
         
         
         # Get position with some correction from the detector
@@ -129,15 +129,16 @@ class get_meta():
         optical_catalog.Ra = optical_catalog.Ra * 15
         
         if np.isfinite(Umag_cutoff):
-            
+            print(f'Reducing using Umag Cutoff{Umag_cutoff}')
             optical_catalog = optical_catalog.drop(optical_catalog[optical_catalog.Umag > Umag_cutoff].index)
             
             if np.isfinite(Bmag_cutoff):
+                print(f'Reducing using Bmag Cutoff{Bmag_cutoff}')
                 # If we have a not nan Bmag cut off, only drop rows with no Umag if Bmag is above a certain cut off
                 optical_catalog = optical_catalog.drop((optical_catalog[optical_catalog.Umag == 0. ].index) & 
                                                        (optical_catalog[optical_catalog.Bmag > Bmag_cutoff].index))
                 return optical_catalog
-            
+        else:  
             # Otherwise just drop things that don't have Umag.
             optical_catalog = optical_catalog.drop(optical_catalog[optical_catalog.Umag == 0. ].index)
             return optical_catalog
@@ -288,4 +289,8 @@ class get_meta():
             if detx2[i] < ((dety2[i]-b_lb)/m_lb + edge_space): edge[i] = -99.
         
         return outside,edge
+    
+    
+    
+    
         
