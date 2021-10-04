@@ -33,7 +33,7 @@ class PhotometryTools:
         error=background.error_image
         subtraction_bkgd=background.median2
         # Estimated bkgd with PhotUtils, subtracting off from image.
-        self.image = np.copy(source.data) - sky_background
+        self.image = np.copy(source.masked_data) - sky_background
         # Basically 0, the median of the subtracted image, makes tractor happier than null background
         self.sky = ConstantSky(subtraction_bkgd)
         

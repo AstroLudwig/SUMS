@@ -7,15 +7,18 @@ from photutils import aperture_photometry
 
 class BkgdEstimator:
 
-    def __init__(self,source,n_pix):
+    def __init__(self,source,n_pix, masked=False):
         '''
         param: source: the output from Retrive Source. Currently assumes that data was divided by exposure time before input (such that the units of the image are counts/s)
         param: n_pix: the size of the 'subimage' for the 2D background estimator
         '''
         
         exposure = source.header["EXPOSURE"]
-        data = source.data
-        
+        if masked:
+            data = source.masked_data  
+        else:
+            data = source.data
+            
         # Initial Masks for data:
         self.mask = make_source_mask(data, snr=5, npixels=5, dilate_size=11)
         self.mask_rotate =  (data == 0)

@@ -19,6 +19,7 @@ from astropy.wcs import WCS
 from astroquery.skyview import SkyView
 from astropy.coordinates import SkyCoord, Angle
 from photutils import aperture_photometry, SkyCircularAperture
+from photutils.aperture import CircularAperture
 
 ################
 # SWIFT Class  #
@@ -56,14 +57,15 @@ class get_meta():
     
     # Callable Functions  
     #############################
-    def with_hdu(self,hdu,
+    def with_hdu(self,hdu,usno_catalog,
+                 optical_catalog,
                  Umag_cutoff=np.nan,
                  Bmag_cutoff=np.nan,
                  fits_origin=0,
                  aperture_size=2.5*2,
                  xdim=[0,300],
                  ydim=[0,300],
-                 optical_catalog="../Data/Optical/table1_smc.dat"):
+                 save_dropped_catalog=True):
         
         # Get general information from the header 
         self.header = hdu.header
@@ -111,7 +113,15 @@ class get_meta():
         
         self.outside,self.edge=self.get_edge(self.detector_positions)
              
-        
+
+        # Masking USNO
+        self.masked_byusno_data,self.usno_drop_cat = self.remove_usno_bright_objects(self.data,usno_catalog,xdim,ydim,threshhold = 65)
+
+        # Masking MCPS 
+        self.masked_data,self.mcps_drop_cat = self.mask_mcps(self.masked_byusno_data,self.pixel_positions[0],self.pixel_positions[1],self.source_intensities,self.catalog)
+
+        # Combine dropped catalogs
+        self.drop_cat = self.combine_drop_cat(self.mcps_drop_cat,self.usno_drop_cat,save_dropped_catalog)
         return self
     
     # Dependent Functions
@@ -159,15 +169,12 @@ class get_meta():
                         & (optical_catalog.Dec > dec[0]) & (optical_catalog.Dec < dec[1])]
         return objects
 
-    # Get an estimate for flux around optical source in uv image
+    # Get an estimate for flux around mcps source in uv image
     def get_intensities(self,catalog,aperture_size):
-        
-        positions = SkyCoord.from_pixel(self.pixel_positions[0],self.pixel_positions[1],self.wcs)
-        
-        apertures = SkyCircularAperture(positions, r = aperture_size * u.arcsec)
-        
-        pix_apertures = apertures.to_pixel(self.wcs)
-                
+
+        # Get Apertures
+        pix_apertures = CircularAperture((self.pixel_positions[0],self.pixel_positions[1]), r = aperture_size)
+
         photometry = aperture_photometry(self.data, pix_apertures)['aperture_sum']
         
         return photometry
@@ -289,8 +296,105 @@ class get_meta():
             if detx2[i] < ((dety2[i]-b_lb)/m_lb + edge_space): edge[i] = -99.
         
         return outside,edge
-    
-    
-    
-    
+
+    def get_usno_bright_objects(self,data,df,xdim,ydim,aperture_size=5):
+        # Get SkyCoord positions
+        # positions = SkyCoord(df['RAJ2000'],df['DEJ2000'],unit=(u.deg))
+        x, y =  SkyCoord(df['RAJ2000'],df['DEJ2000'],unit=u.deg).to_pixel(self.wcs)
+        x = x - xdim[0]
+        y = y - ydim[0]
+        # Get Apertures
+        pix_apertures = CircularAperture((x,y), r = aperture_size)
+        # Convert to Pixel Apertures
+        #pix_apertures = apertures.to_pixel(self.wcs)
+        # Get Photometry
+        return aperture_photometry(data, pix_apertures)['aperture_sum']
+
+    def mask_out(self,x,y,data,aperture_size = 12):
+        # Mask based on xy coordinates
+        apertures = CircularAperture([(x_,y_) for x_,y_ in zip(x,y)], aperture_size)
+        masks = apertures.to_mask(method="center")
+
+        # Create a template of all ones.
+        blank_data = np.ones(np.shape(data))
+
+        # Zero out where the mask is
+        for mask in masks:
+            new_mask = mask.to_image(np.shape(data))
+            m_x,m_y = np.where(new_mask !=0)
+            blank_data[m_x,m_y] = 0
+
+        # Multiply the mask by the data
+        masked_data = blank_data * data
         
+        return masked_data
+
+    def remove_usno_bright_objects(self,data,usno_catalog,xdim,ydim,threshhold = 65): 
+        # Read in USNO Catalog
+        df = pd.read_csv(usno_catalog,delimiter='\s+')
+
+        # Get the photometry for bright USNO Sources 
+        phot = self.get_usno_bright_objects(data,df,xdim,ydim) 
+
+        # Filter that photometry for valid and above given threshhold (count rate)
+        drop_cat = df[(~np.isnan(phot)) & (phot != 0) & (phot > threshhold)]
+
+        # If anything should be filtered
+        if len(drop_cat) > 0: 
+            drop_cat = df[(~np.isnan(phot)) & (phot != 0) & (phot > threshhold)]
+            x,y =  SkyCoord(drop_cat.RAJ2000,drop_cat.DEJ2000,unit=u.deg).to_pixel(self.wcs)
+            x = x - xdim[0]
+            y = y - ydim[0]
+            # Keep track of what is filtered - Add the aperture sum count rate to a catalog
+            phot = phot[(~np.isnan(phot)) & (phot != 0) & (phot > threshhold)]
+            drop_cat['phot'] = phot
+            drop_cat = drop_cat[['RAJ2000','DEJ2000','phot']]
+            drop_cat = drop_cat.rename({'RAJ2000':'ra','DEJ2000':'dec'},axis='columns')
+            drop_cat['cat'] = np.repeat('USNO',len(drop_cat))
+            # Mask out bright usno objects 
+            masked_from_usno_im = self.mask_out(x,y,data,aperture_size = 12) 
+            return masked_from_usno_im, drop_cat
+    
+        else: 
+            print('No USNO to Remove.')
+            return data,None
+    
+    def mask_mcps(self, data,x,y,photometry,catalog,threshhold=65):
+
+        mask_x = x[photometry > threshhold]
+        mask_y = y[photometry > threshhold]
+
+        if len(mask_x) > 0: 
+            masked_data = self.mask_out(mask_x,mask_y,data,aperture_size = 12)
+            drop_cat = catalog[photometry > threshhold]
+            drop_cat = drop_cat[['Ra','Dec']]
+            drop_cat = drop_cat.rename({'Ra':'ra','Dec':'dec'},axis='columns')
+            drop_cat['phot'] = photometry[photometry > threshhold]
+            drop_cat['cat'] = np.repeat('MCPS',len(drop_cat))
+            return masked_data, drop_cat     
+
+        else:
+            print("No MCPS sources to drop")
+            return data,None
+    
+    def combine_drop_cat(self,mcps_drop,usno_drop,save_dropped_catalog):
+        
+        pdtype = pd.core.frame.DataFrame
+
+        if type(mcps_drop) == pdtype and type(usno_drop) == pdtype:
+            drop_cat = mcps_drop.append(usno_drop)
+        elif type(mcps_drop) != None and type(usno_drop) == None:
+            drop_cat = mcps_drop
+        elif type(usno_drop) != None and type(usno_drop) == None:
+            drop_cat = usno_drop
+        else:
+            print('Nothing masked.')    
+            drop_cat = None
+
+        if save_dropped_catalog and type(drop_cat) != None:
+            keys = ['OBS_ID','FILTER']
+            obsid = self.header[keys[0]]
+            filt = self.header[keys[1]]
+            drop_cat.to_csv(f'masked_catalog_{obsid}_{filt}.csv')
+
+        return drop_cat

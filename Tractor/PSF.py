@@ -13,13 +13,13 @@ class psf_fit():
     def __init__(self,pixel_per_arsecond,uvfilter,width,save=False,cog_file="../Data/Calibration/swureef20041120v104.fits",fwhm=2.5):
     
         
-        if uvfilter == "UVM2" or uvfilter == "uvm2": 
+        if uvfilter == "UVM2" or uvfilter == "uvm2" or uvfilter =="um2": 
             self.filter_n = 6
             
-        if uvfilter == "UVW2" or uvfilter == "uvw2": 
+        if uvfilter == "UVW2" or uvfilter == "uvw2" or uvfilter =="uw2": 
             self.filter_n = 5
             
-        if uvfilter == "UVW1" or uvfilter == "uvw1": 
+        if uvfilter == "UVW1" or uvfilter == "uvw1" or uvfilter =="uw1": 
             self.filter_n = 4
             
         self.CoG = fits.open(cog_file)
