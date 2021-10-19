@@ -327,6 +327,9 @@ class get_meta():
         # Multiply the mask by the data
         masked_data = blank_data * data
         
+        # Turn 0's to nans to avoid speckling --> this didnt seem to work, assertion error.
+        #masked_data[masked_data == 0] = np.nan
+        
         return masked_data
 
     def remove_usno_bright_objects(self,data,usno_catalog,xdim,ydim,threshhold = 65): 

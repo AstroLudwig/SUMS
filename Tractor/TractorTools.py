@@ -88,7 +88,7 @@ class PhotometryTools:
         
         self.model = self.tractor_object.getModelImage(0)
         self.chi = self.tractor_object.getChiImage(0)
-        
+        self.difference = self.model - self.chi
         self.tractor_catalog = self.tractor_object.catalog
         
         # Dustin Suggestion to thaw everything at the end.
@@ -205,7 +205,7 @@ class PhotometryTools:
         fits.writeto(savename[:-5] + "_model.fits",model,source.header,overwrite=True)
         fits.writeto(savename[:-5] + "_chi.fits",chi,source.header,overwrite=True)
         
-        if type(background) == numpy.ndarray:
+        if type(background) == np.ndarray:
             fits.writeto(savename[:-5] + "_bkgd_subtracted_img.fits",self.image,source.header,overwrite=True)
         
     def update_header(self,fits_table_sname,source):
